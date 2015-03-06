@@ -7,6 +7,33 @@
  * License: MIT
  */
 angular.module('dndLists', [])
+  /**
+   * Lorem ipsum
+   */
+  .service('dndService', function()
+  {
+    var draggingElement,
+        draggingElementHeight;
+
+    function getDraggingElement() {
+      return draggingElement;
+    }
+
+    function getDraggingElementHeight() {
+      return draggingElementHeight;
+    }
+
+    function setDraggingElement(newValue) {
+      draggingElement = newValue;
+      draggingElementHeight = newValue.outerHeight();
+    }
+
+    return {
+      getDraggingElement: getDraggingElement,
+      getDraggingElementHeight: getDraggingElementHeight,
+      setDraggingElement: setDraggingElement
+    }
+  })
 
   /**
    * Use the dnd-draggable attribute to make your element draggable
@@ -60,8 +87,8 @@ angular.module('dndLists', [])
    *                      it's source position, and not the "element" that the user is dragging with
    *                      his mouse pointer.
    */
-  .directive('dndDraggable', ['$parse', '$timeout', 'dndDropEffectWorkaround', 'dndDragTypeWorkaround',
-                      function($parse,   $timeout,   dndDropEffectWorkaround,   dndDragTypeWorkaround) {
+  .directive('dndDraggable', ['$parse', '$timeout', 'dndDropEffectWorkaround', 'dndDragTypeWorkaround', 'dndService',
+                      function($parse,   $timeout,   dndDropEffectWorkaround,   dndDragTypeWorkaround,   dndService) {
     return function(scope, element, attr) {
       // Set the HTML5 draggable attribute on the element
       element.attr("draggable", "true");
@@ -79,6 +106,13 @@ angular.module('dndLists', [])
        */
       element.on('dragstart', function(event) {
         event = event.originalEvent || event;
+
+        // Register dragging element to service
+        if (angular.isDefined(attr.dndTarget)) {
+          dndService.setDraggingElement(element.find(attr.dndTarget));
+        } else {
+          dndService.setDraggingElement(element);
+        }
 
         // Serialize the data associated with this element. IE only supports the Text drag type
         event.dataTransfer.setData("Text", angular.toJson(scope.$eval(attr.dndDraggable)));
@@ -141,21 +175,25 @@ angular.module('dndLists', [])
        * specified with the dnd-selected attribute.
        */
       element.on('click', function(event) {
-        event = event.originalEvent || event;
+        if (angular.isUndefined(attr.dndDisableIf) || !scope.$eval(attr.dndDisableIf)) {
+          event = event.originalEvent || event;
 
-        scope.$apply(function() {
-          $parse(attr.dndSelected)(scope, {event: event});
-        });
+          scope.$apply(function() {
+            $parse(attr.dndSelected)(scope, {event: event});
+          });
 
-        event.stopPropagation();
+          event.stopPropagation();
+        }
       });
 
       /**
        * Workaround to make element draggable in IE9
        */
       element.on('selectstart', function() {
-        if (this.dragDrop) this.dragDrop();
-        return false;
+        if (angular.isUndefined(attr.dndDisableIf) || !scope.$eval(attr.dndDisableIf)) {
+          if (this.dragDrop) this.dragDrop();
+          return false;
+        }
       });
     };
   }])
@@ -207,12 +245,12 @@ angular.module('dndLists', [])
    *                        dndPlaceholder set.
    * - dndDragover          Will be added to the list while an element is dragged over the list.
    */
-  .directive('dndList', ['$parse', '$timeout', 'dndDropEffectWorkaround', 'dndDragTypeWorkaround',
-                 function($parse,   $timeout,   dndDropEffectWorkaround,   dndDragTypeWorkaround) {
+  .directive('dndList', ['$parse', '$timeout', 'dndDropEffectWorkaround', 'dndDragTypeWorkaround', 'dndService',
+                 function($parse,   $timeout,   dndDropEffectWorkaround,   dndDragTypeWorkaround,   dndService) {
     return function(scope, element, attr) {
       // While an element is dragged over the list, this placeholder element is inserted
       // at the location where the element would be inserted after dropping
-      var placeholder = angular.element("<li class='dndPlaceholder'></li>");
+      var placeholder = angular.element("<li class='dndPlaceholder'><div class='dndPlaceholder-inner'></div></li>");
       var placeholderNode = placeholder[0];
       var listNode = element[0];
 
@@ -227,6 +265,13 @@ angular.module('dndLists', [])
         event = event.originalEvent || event;
 
         if (!isDropAllowed(event)) return true;
+
+        // Get dragging element from the service to style placeholder
+        placeholder.css({
+          height: dndService.getDraggingElementHeight(),
+          margin: dndService.getDraggingElement().css('margin'),
+          padding: dndService.getDraggingElement().css('padding')
+        })
 
         // First of all, make sure that the placeholder is shown
         // This is especially important if the list is empty
@@ -353,6 +398,8 @@ angular.module('dndLists', [])
        */
       element.on('dragleave', function(event) {
         event = event.originalEvent || event;
+
+        invokeCallback(attr.dndDragleave, event)
 
         element.removeClass("dndDragover");
         $timeout(function() {
