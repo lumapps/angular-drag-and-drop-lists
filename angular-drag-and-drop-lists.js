@@ -100,12 +100,38 @@ angular.module('dndLists', [])
         });
       }
 
+      // Get handleElement, if any.
+      var handleElement;
+      $timeout(function()
+      {
+        handleElement = element[0].querySelector('.dndHandle');
+      })
+
+      // If handleCheck is not set to true on mousedown, dragging event in stopped.
+      var handleCheck = false;
+
+      /**
+       * When the mouse is clicked on the element, set var handleCheck to true if either there
+       * is no handleElement (thus no need) or if the target is contained by a handleElement.
+       * Else: false!
+       */
+      element.on('mousedown', function(event) {
+        handleCheck = (handleElement === null) || handleElement.contains(event.target);
+      });
+
       /**
        * When the drag operation is started we have to prepare the dataTransfer object,
        * which is the primary way we communicate with the target element
        */
       element.on('dragstart', function(event) {
         event = event.originalEvent || event;
+
+        // If the handleCheck is false, stop the event; no dragging allowed.
+        if (!handleCheck) {
+          event.preventDefault();
+          event.stopPropagation();
+          return false;
+        }
 
         // Register dragging element to service
         if (angular.isDefined(attr.dndTarget)) {
@@ -188,7 +214,7 @@ angular.module('dndLists', [])
        * Workaround to make element draggable in IE9
        */
       element.on('selectstart', function() {
-        if (angular.isUndefined(attr.dndDisableIf) || !scope.$eval(attr.dndDisableIf)) {
+        if ((angular.isUndefined(attr.dndDisableIf) || !scope.$eval(attr.dndDisableIf)) && handleCheck) {
           if (this.dragDrop) this.dragDrop();
           return false;
         }
